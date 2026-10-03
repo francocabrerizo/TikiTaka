@@ -1,4 +1,5 @@
 import React from 'react';
+import Link from 'next/link';
 
 export default function Home() {
   return (
@@ -41,7 +42,7 @@ export default function Home() {
         <div className="flex flex-col gap-6 w-full max-w-sm mt-4">
           
           {/* BOTÓN 1: JUGAR */}
-          <button className="relative w-full inline-block group focus:outline-none">
+          <Link href="/draft" className="relative w-full inline-block group focus:outline-none">
             <span className="absolute inset-0 bg-green-950 rounded-2xl translate-y-3 group-active:translate-y-1 transition-transform duration-100 ease-in-out"></span>
             <span className="relative flex items-center justify-center gap-3 w-full px-8 py-5 bg-gradient-to-b from-lime-400 to-lime-600 text-green-950 text-3xl font-black uppercase tracking-widest border-4 border-lime-200 rounded-2xl transform group-active:translate-y-2 transition-transform duration-100 ease-in-out text-center shadow-[0_0_30px_rgba(163,230,53,0.4)] hover:brightness-110">
               {/* Icono de Play SVG */}
@@ -50,15 +51,15 @@ export default function Home() {
               </svg>
               JUGAR
             </span>
-          </button>
+          </Link>
 
           {/* BOTÓN 2: APOYAR EL PROYECTO */}
-          <button className="relative w-full inline-block group focus:outline-none">
+          <Link href="/draft" className="relative w-full inline-block group focus:outline-none">
             <span className="absolute inset-0 bg-emerald-950 rounded-xl translate-y-2 group-active:translate-y-1 transition-transform duration-100 ease-in-out"></span>
             <span className="relative flex items-center justify-center gap-3 w-full px-8 py-4 bg-gradient-to-b from-emerald-600 to-teal-800 text-white text-lg font-bold uppercase tracking-widest border-2 border-emerald-400 rounded-xl transform group-active:translate-y-1 transition-transform duration-100 ease-in-out text-center shadow-[0_0_15px_rgba(16,185,129,0.2)] hover:brightness-110">
               <span></span> Apoyar el proyecto
             </span>
-          </button>
+          </Link>
 
         </div>
       </div>
