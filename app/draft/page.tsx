@@ -3,50 +3,112 @@
 import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
 import CartaJugador, { Jugador } from '../../components/CartaJugador';
-
-const JUGADORES_MOCK: Jugador[] = [
-  { id: "1", nombre: "Borja", posicion: "DC", media: 87, foto: "", escudo: "", rareza: "oro" },
-  { id: "2", nombre: "Cavani", posicion: "DC", media: 88, foto: "", escudo: "", rareza: "franquicia" },
-  { id: "3", nombre: "Zenón", posicion: "MI", media: 82, foto: "", escudo: "", rareza: "plata" },
-  { id: "4", nombre: "Pibe", posicion: "MCO", media: 64, foto: "", escudo: "", rareza: "bronce" },
-  { id: "5", nombre: "Armani", posicion: "POR", media: 84, foto: "", escudo: "", rareza: "oro" },
-];
+// IMPORTAMOS LA BASE DE DATOS REAL (Ajustá la ruta si tu carpeta data está en otro lado)
+import { BASE_DE_DATOS } from '../data/jugadores';
 
 export default function DraftPage() {
   const [equipo, setEquipo] = useState<Record<string, Jugador>>({});
+  
   const [modalAbierto, setModalAbierto] = useState(false);
   const [slotActivo, setSlotActivo] = useState<{ id: string, posicion: string } | null>(null);
+  const [jugadorSeleccionando, setJugadorSeleccionando] = useState<string | null>(null);
+  const [slotAIntercambiar, setSlotAIntercambiar] = useState<string | null>(null);
 
-  const abrirModal = (idSlot: string, posicionVisual: string) => {
-    setSlotActivo({ id: idSlot, posicion: posicionVisual });
-    setModalAbierto(true);
+  // NUEVO ESTADO: Guarda los 5 jugadores aleatorios que se muestran en el modal actual
+  const [opcionesDraft, setOpcionesDraft] = useState<Jugador[]>([]);
+
+  // EL MOTOR RANDOMIZER
+  const obtenerOpcionesRandom = (posicionRequerida: string): Jugador[] => {
+    // 1. Filtrar por posición. Si es "SUB" (Suplente), traemos a TODOS.
+    const jugadoresFiltrados = posicionRequerida === 'SUB' 
+      ? BASE_DE_DATOS 
+      : BASE_DE_DATOS.filter(jugador => jugador.posicion === posicionRequerida);
+
+    // 2. Mezclar el array aleatoriamente (Algoritmo de Fisher-Yates simplificado)
+    const mezclados = [...jugadoresFiltrados].sort(() => 0.5 - Math.random());
+
+    // 3. Cortar los primeros 5 (o menos, si la base de datos no tiene suficientes)
+    return mezclados.slice(0, 5);
+  };
+
+  const manejarClicSlot = (idSlot: string, posicionVisual: string) => {
+    const jugadorEnSlot = equipo[idSlot];
+
+    if (slotAIntercambiar) {
+      if (slotAIntercambiar === idSlot) {
+        setSlotAIntercambiar(null);
+      } else if (jugadorEnSlot) {
+        setEquipo(prev => {
+          const nuevoEquipo = { ...prev };
+          const jugadorA = nuevoEquipo[slotAIntercambiar];
+          const jugadorB = nuevoEquipo[idSlot];
+          nuevoEquipo[slotAIntercambiar] = jugadorB;
+          nuevoEquipo[idSlot] = jugadorA;
+          return nuevoEquipo;
+        });
+        setSlotAIntercambiar(null);
+      } else {
+        setSlotAIntercambiar(null);
+        
+        // Ejecutamos el Randomizer antes de abrir
+        setOpcionesDraft(obtenerOpcionesRandom(posicionVisual));
+        setSlotActivo({ id: idSlot, posicion: posicionVisual });
+        setModalAbierto(true);
+        setJugadorSeleccionando(null);
+      }
+    } else {
+      if (jugadorEnSlot) {
+        setSlotAIntercambiar(idSlot);
+      } else {
+        // Ejecutamos el Randomizer antes de abrir
+        setOpcionesDraft(obtenerOpcionesRandom(posicionVisual));
+        setSlotActivo({ id: idSlot, posicion: posicionVisual });
+        setModalAbierto(true);
+        setJugadorSeleccionando(null);
+      }
+    }
   };
 
   const cerrarModal = () => {
     setModalAbierto(false);
     setSlotActivo(null);
+    setJugadorSeleccionando(null);
+    // Limpiamos las opciones al cerrar para que no queden "cacheadas" visualmente
+    setTimeout(() => setOpcionesDraft([]), 200); 
   };
 
   const seleccionarJugador = (jugador: Jugador) => {
-    if (slotActivo) {
+    if (!slotActivo || jugadorSeleccionando) return;
+    setJugadorSeleccionando(jugador.id);
+    setTimeout(() => {
       setEquipo(prev => ({ ...prev, [slotActivo.id]: jugador }));
       cerrarModal();
-    }
+    }, 500);
   };
 
   const mediaEquipo = useMemo(() => {
-    const jugadoresSeleccionados = Object.values(equipo);
-    if (jugadoresSeleccionados.length === 0) return 0;
-    const sumaMedia = jugadoresSeleccionados.reduce((acc, jug) => acc + jug.media, 0);
-    return Math.floor(sumaMedia / jugadoresSeleccionados.length);
+    const titulares = Object.entries(equipo)
+      .filter(([id]) => !id.startsWith("sub"))
+      .map(([, jug]) => jug);
+
+    if (titulares.length === 0) return 0;
+    const sumaMedia = titulares.reduce((acc, jug) => acc + jug.media, 0);
+    return Math.floor(sumaMedia / titulares.length);
   }, [equipo]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-green-800 to-green-950 py-6 px-2 font-sans flex flex-col items-center overflow-x-hidden relative pb-24">
+    <div className="min-h-screen bg-gradient-to-b from-green-800 to-green-950 py-6 px-2 font-sans flex flex-col items-center overflow-x-hidden relative pb-24 select-none">
       
-      {/* HEADER / MARCADOR */}
+      <style dangerouslySetInnerHTML={{__html: `
+        * { -webkit-tap-highlight-color: transparent !important; }
+        button:focus, button:active, a:focus, a:active { outline: none !important; box-shadow: none !important; }
+        @keyframes entrarCascada { 0% { opacity: 0; transform: translateX(100px) scale(0.95); } 100% { opacity: 1; transform: translateX(0) scale(1); } }
+        .anim-cascada { opacity: 0; animation: entrarCascada 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+      `}} />
+
+      {/* HEADER */}
       <header className="w-full max-w-4xl flex justify-between items-center bg-black/60 p-4 md:p-6 rounded-2xl border-2 border-lime-500/30 mb-8 z-20">
-        <Link href="/" className="text-lime-400 font-black hover:text-white transition-colors uppercase tracking-wider text-sm flex items-center gap-2">
+        <Link href="/" className="text-lime-400 font-black hover:text-white transition-colors uppercase tracking-wider text-sm flex items-center gap-2 outline-none focus:outline-none">
           <span>◀</span> Salir
         </Link>
         <div className="text-center">
@@ -67,23 +129,23 @@ export default function DraftPage() {
         <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[50%] h-[15%] border-t-4 border-l-4 border-r-4 border-white/30 rounded-t-md pointer-events-none"></div>
 
         <div className="relative z-10 flex justify-center gap-4 md:gap-10 px-2">
-          <Slot id="ei" posicion="EI" jugador={equipo["ei"]} onClick={() => abrirModal("ei", "EI")} />
-          <Slot id="dc" posicion="DC" jugador={equipo["dc"]} onClick={() => abrirModal("dc", "DC")} />
-          <Slot id="ed" posicion="ED" jugador={equipo["ed"]} onClick={() => abrirModal("ed", "ED")} />
+          <Slot id="ei" posicion="EI" jugador={equipo["ei"]} isSeleccionadoParaCambio={slotAIntercambiar === "ei"} onClick={() => manejarClicSlot("ei", "EI")} />
+          <Slot id="dc" posicion="DC" jugador={equipo["dc"]} isSeleccionadoParaCambio={slotAIntercambiar === "dc"} onClick={() => manejarClicSlot("dc", "DC")} />
+          <Slot id="ed" posicion="ED" jugador={equipo["ed"]} isSeleccionadoParaCambio={slotAIntercambiar === "ed"} onClick={() => manejarClicSlot("ed", "ED")} />
         </div>
         <div className="relative z-10 flex justify-center gap-4 md:gap-10 px-2">
-          <Slot id="mc1" posicion="MC" jugador={equipo["mc1"]} onClick={() => abrirModal("mc1", "MC")} />
-          <Slot id="mc2" posicion="MC" jugador={equipo["mc2"]} onClick={() => abrirModal("mc2", "MC")} />
-          <Slot id="mc3" posicion="MC" jugador={equipo["mc3"]} onClick={() => abrirModal("mc3", "MC")} />
+          <Slot id="mc1" posicion="MC" jugador={equipo["mc1"]} isSeleccionadoParaCambio={slotAIntercambiar === "mc1"} onClick={() => manejarClicSlot("mc1", "MC")} />
+          <Slot id="mc2" posicion="MC" jugador={equipo["mc2"]} isSeleccionadoParaCambio={slotAIntercambiar === "mc2"} onClick={() => manejarClicSlot("mc2", "MC")} />
+          <Slot id="mc3" posicion="MC" jugador={equipo["mc3"]} isSeleccionadoParaCambio={slotAIntercambiar === "mc3"} onClick={() => manejarClicSlot("mc3", "MC")} />
         </div>
         <div className="relative z-10 flex justify-center gap-2 md:gap-6 px-1">
-          <Slot id="li" posicion="LI" jugador={equipo["li"]} onClick={() => abrirModal("li", "LI")} />
-          <Slot id="dfc1" posicion="DFC" jugador={equipo["dfc1"]} onClick={() => abrirModal("dfc1", "DFC")} />
-          <Slot id="dfc2" posicion="DFC" jugador={equipo["dfc2"]} onClick={() => abrirModal("dfc2", "DFC")} />
-          <Slot id="ld" posicion="LD" jugador={equipo["ld"]} onClick={() => abrirModal("ld", "LD")} />
+          <Slot id="li" posicion="LI" jugador={equipo["li"]} isSeleccionadoParaCambio={slotAIntercambiar === "li"} onClick={() => manejarClicSlot("li", "LI")} />
+          <Slot id="dfc1" posicion="DFC" jugador={equipo["dfc1"]} isSeleccionadoParaCambio={slotAIntercambiar === "dfc1"} onClick={() => manejarClicSlot("dfc1", "DFC")} />
+          <Slot id="dfc2" posicion="DFC" jugador={equipo["dfc2"]} isSeleccionadoParaCambio={slotAIntercambiar === "dfc2"} onClick={() => manejarClicSlot("dfc2", "DFC")} />
+          <Slot id="ld" posicion="LD" jugador={equipo["ld"]} isSeleccionadoParaCambio={slotAIntercambiar === "ld"} onClick={() => manejarClicSlot("ld", "LD")} />
         </div>
         <div className="relative z-10 flex justify-center px-2">
-          <Slot id="por" posicion="POR" jugador={equipo["por"]} onClick={() => abrirModal("por", "POR")} />
+          <Slot id="por" posicion="POR" jugador={equipo["por"]} isSeleccionadoParaCambio={slotAIntercambiar === "por"} onClick={() => manejarClicSlot("por", "POR")} />
         </div>
       </div>
 
@@ -91,56 +153,57 @@ export default function DraftPage() {
       <div className="w-full max-w-3xl mt-10 bg-black/60 border-t-2 border-white/10 rounded-t-3xl p-6 shadow-2xl z-10">
         <h3 className="text-white text-center font-black tracking-widest uppercase mb-6 opacity-70 text-sm">Banca de Suplentes</h3>
         <div className="flex justify-center gap-3 md:gap-6 flex-wrap">
-          <Slot id="sub1" posicion="POR" jugador={equipo["sub1"]} onClick={() => abrirModal("sub1", "POR")} />
-          <Slot id="sub2" posicion="SUB" jugador={equipo["sub2"]} onClick={() => abrirModal("sub2", "SUB")} />
-          <Slot id="sub3" posicion="SUB" jugador={equipo["sub3"]} onClick={() => abrirModal("sub3", "SUB")} />
-          <Slot id="sub4" posicion="SUB" jugador={equipo["sub4"]} onClick={() => abrirModal("sub4", "SUB")} />
-          <Slot id="sub5" posicion="SUB" jugador={equipo["sub5"]} onClick={() => abrirModal("sub5", "SUB")} />
-          <Slot id="sub6" posicion="SUB" jugador={equipo["sub6"]} onClick={() => abrirModal("sub6", "SUB")} />
+          <Slot id="sub1" posicion="POR" jugador={equipo["sub1"]} isSeleccionadoParaCambio={slotAIntercambiar === "sub1"} onClick={() => manejarClicSlot("sub1", "POR")} />
+          <Slot id="sub2" posicion="SUB" jugador={equipo["sub2"]} isSeleccionadoParaCambio={slotAIntercambiar === "sub2"} onClick={() => manejarClicSlot("sub2", "SUB")} />
+          <Slot id="sub3" posicion="SUB" jugador={equipo["sub3"]} isSeleccionadoParaCambio={slotAIntercambiar === "sub3"} onClick={() => manejarClicSlot("sub3", "SUB")} />
+          <Slot id="sub4" posicion="SUB" jugador={equipo["sub4"]} isSeleccionadoParaCambio={slotAIntercambiar === "sub4"} onClick={() => manejarClicSlot("sub4", "SUB")} />
+          <Slot id="sub5" posicion="SUB" jugador={equipo["sub5"]} isSeleccionadoParaCambio={slotAIntercambiar === "sub5"} onClick={() => manejarClicSlot("sub5", "SUB")} />
+          <Slot id="sub6" posicion="SUB" jugador={equipo["sub6"]} isSeleccionadoParaCambio={slotAIntercambiar === "sub6"} onClick={() => manejarClicSlot("sub6", "SUB")} />
         </div>
       </div>
 
-      {/* EL MODAL DE SELECCIÓN (ALTO RENDIMIENTO - SIN BLUR) */}
+      {/* EL MODAL DE SELECCIÓN DINÁMICO */}
       {modalAbierto && slotActivo && (
         <div className="fixed inset-0 z-50 flex flex-col bg-[#050f0a] animate-in fade-in duration-150">
-          
-          {/* Header Superior Sólido */}
           <div className="w-full h-20 md:h-24 flex justify-center items-center relative z-20 bg-black/90 border-b border-white/10 shadow-xl shrink-0">
             <h3 className="text-white text-3xl md:text-4xl font-black uppercase tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-lime-400 to-green-500 drop-shadow-md">
               Elegí: {slotActivo.posicion}
             </h3>
-            <button 
-              onClick={cerrarModal} 
-              className="absolute right-6 md:right-10 text-white/40 hover:text-red-500 text-5xl md:text-6xl font-light transition-colors focus:outline-none"
-            >
+            <button type="button" onClick={cerrarModal} className="absolute right-6 md:right-10 text-white/40 hover:text-red-500 text-5xl md:text-6xl font-light transition-colors appearance-none bg-transparent border-none outline-none focus:outline-none">
               ×
             </button>
           </div>
-          
-          {/* Contenedor de Paneles */}
           <div className="flex-1 w-full flex justify-center items-stretch overflow-x-auto z-10">
-            {JUGADORES_MOCK.map((jugador) => (
-              <div 
-                key={jugador.id} 
-                className="relative flex-1 min-w-[140px] max-w-[280px] h-full flex flex-col items-center justify-center cursor-pointer group border-x border-white/5 first:border-l-0 last:border-r-0 transition-colors duration-300 hover:bg-white/5"
-                onClick={() => seleccionarJugador(jugador)}
-              >
-                {/* Iluminación trasera dorada pura (Solo Opacidad) */}
-                <div className="absolute inset-0 opacity-0 group-hover:opacity-100 bg-[radial-gradient(circle_at_center,rgba(250,204,21,0.15)_0%,transparent_60%)] transition-opacity duration-300 pointer-events-none will-change-[opacity]"></div>
+            {/* ITERAMOS SOBRE EL ESTADO DINÁMICO, NO SOBRE EL MOCK ESTÁTICO */}
+            {opcionesDraft.map((jugador, index) => {
+              const isSeleccionado = jugadorSeleccionando === jugador.id;
+              const isOtroSeleccionado = jugadorSeleccionando && jugadorSeleccionando !== jugador.id;
+              const claseCascada = !jugadorSeleccionando ? 'anim-cascada' : '';
 
-                {/* La Carta (Transformaciones aceleradas por GPU) */}
-                <div className="relative z-10 transition-transform duration-200 ease-out group-hover:-translate-y-6 group-hover:scale-105 will-change-transform">
-                  <CartaJugador jugador={jugador} />
-                </div>
-
-                {/* Botón de acción */}
-                <div className="absolute bottom-12 md:bottom-24 opacity-0 group-hover:opacity-100 transition-all duration-200 translate-y-6 group-hover:translate-y-0 pointer-events-none will-change-transform">
-                  <span className="bg-gradient-to-r from-lime-400 to-lime-500 text-green-950 font-black uppercase tracking-widest px-6 md:px-8 py-2 md:py-3 rounded-full text-xs md:text-sm shadow-[0_0_20px_rgba(163,230,53,0.3)]">
-                    Seleccionar
-                  </span>
-                </div>
-              </div>
-            ))}
+              return (
+                <button 
+                  type="button"
+                  key={jugador.id} 
+                  style={{ animationDelay: !jugadorSeleccionando ? `${index * 250}ms` : '0ms' }}
+                  className={`appearance-none bg-transparent border-none outline-none focus:outline-none active:outline-none ring-0 p-0 m-0 relative flex-1 min-w-[140px] max-w-[280px] h-full flex flex-col items-center justify-center cursor-pointer group border-x border-white/5 first:border-l-0 last:border-r-0 transition-all duration-500 hover:bg-white/5 block text-left
+                    ${claseCascada}
+                    ${isOtroSeleccionado ? 'opacity-0 scale-95 blur-md' : ''} 
+                    ${isSeleccionado ? 'bg-white/10 z-20' : ''}
+                  `}
+                  onClick={() => seleccionarJugador(jugador)}
+                >
+                  <div className={`absolute inset-0 transition-opacity duration-300 pointer-events-none will-change-[opacity] ${isSeleccionado ? 'opacity-100 bg-[radial-gradient(circle_at_center,rgba(250,204,21,0.4)_0%,transparent_70%)]' : 'opacity-0 group-hover:opacity-100 bg-[radial-gradient(circle_at_center,rgba(250,204,21,0.15)_0%,transparent_60%)]'}`}></div>
+                  <div className={`relative z-10 transition-transform duration-300 ease-out will-change-transform ${isSeleccionado ? 'scale-110 -translate-y-8' : 'group-hover:-translate-y-6 group-hover:scale-105'}`}>
+                    <CartaJugador jugador={jugador} />
+                  </div>
+                  <div className={`absolute bottom-12 md:bottom-24 transition-all duration-300 pointer-events-none will-change-transform ${isSeleccionado ? 'opacity-0' : 'opacity-0 group-hover:opacity-100 translate-y-6 group-hover:translate-y-0'}`}>
+                    <span className="bg-gradient-to-r from-lime-400 to-lime-500 text-green-950 font-black uppercase tracking-widest px-6 md:px-8 py-2 md:py-3 rounded-full text-xs md:text-sm shadow-[0_0_20px_rgba(163,230,53,0.3)]">
+                      Seleccionar
+                    </span>
+                  </div>
+                </button>
+              )
+            })}
           </div>
         </div>
       )}
@@ -149,19 +212,27 @@ export default function DraftPage() {
 }
 
 // EL NUEVO SLOT
-function Slot({ id, posicion, jugador, onClick }: { id: string, posicion: string, jugador?: Jugador, onClick: () => void }) {
+function Slot({ id, posicion, jugador, isSeleccionadoParaCambio, onClick }: { id: string, posicion: string, jugador?: Jugador, isSeleccionadoParaCambio: boolean, onClick: () => void }) {
   return (
-    <div onClick={onClick} className="relative w-[4.5rem] h-[6.5rem] md:w-[7rem] md:h-[10rem] mt-6 shrink-0 cursor-pointer group">
+    <button 
+      type="button"
+      onClick={onClick} 
+      className={`appearance-none bg-transparent border-none outline-none focus:outline-none active:outline-none ring-0 p-0 m-0 relative w-[4.5rem] h-[6.5rem] md:w-[7rem] md:h-[10rem] shrink-0 block text-left cursor-pointer transition-all duration-200 
+        ${isSeleccionadoParaCambio ? 'ring-4 ring-yellow-400 rounded-xl scale-105 z-30 shadow-[0_0_30px_rgba(250,204,21,0.6)] animate-pulse' : 'group hover:scale-105 hover:z-20'}
+      `}
+    >
       {jugador ? (
-        <div className="absolute inset-0 z-20 animate-in zoom-in-95 fade-in duration-200 ease-out drop-shadow-xl will-change-transform">
+        <div className="absolute inset-0 z-20 animate-in zoom-in-[0.5] fade-in duration-500 ease-out drop-shadow-2xl will-change-transform pointer-events-none">
           <CartaJugador jugador={jugador} variante="mini" />
         </div>
       ) : (
-        <div className="absolute inset-0 bg-black/60 border-2 border-dashed border-white/40 rounded-xl flex flex-col items-center justify-center hover:bg-lime-500/20 transition-colors shadow-inner z-10 group-hover:border-lime-400">
-          <span className="text-lime-400 font-black text-2xl md:text-4xl drop-shadow-md transition-transform group-hover:scale-110 will-change-transform">+</span>
+        <div className={`absolute inset-0 bg-black/60 border-2 border-dashed rounded-xl flex flex-col items-center justify-center transition-colors shadow-inner z-10 pointer-events-none
+          ${isSeleccionadoParaCambio ? 'border-yellow-400 bg-yellow-900/40' : 'border-white/40 group-hover:bg-lime-500/20 group-hover:border-lime-400'}
+        `}>
+          <span className={`font-black text-2xl md:text-4xl drop-shadow-md transition-transform will-change-transform ${isSeleccionadoParaCambio ? 'text-yellow-400 scale-110' : 'text-lime-400 group-hover:scale-110'}`}>+</span>
           <span className="text-white text-[10px] md:text-xs font-bold mt-1 tracking-widest bg-black/80 px-2 md:px-3 py-0.5 rounded-full">{posicion}</span>
         </div>
       )}
-    </div>
+    </button>
   );
 }
